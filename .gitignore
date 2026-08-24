@@ -10,3 +10,7 @@ dist/
 build/
 data/results/
 .DS_Store
+bias_probe_phase.txt
+calibrate_judge_phase.txt
+compare_phase.txt
+plan.txt
