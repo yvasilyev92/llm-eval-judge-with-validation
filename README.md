@@ -6,37 +6,6 @@ The UI’s centerpiece is the **Judge Trust Report**: prompt-B win rate, three t
 
 This is **eval tooling**, not a medical product. Generated answers are judge inputs only. Not medical advice.
 
-## Setup
-
-1. Install uv:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-2. Install the project:
-
-```bash
-uv sync
-```
-
-3. Copy `.env.example` to `.env` and add `OPENAI_API_KEY`.
-
-4. Run the app:
-
-```bash
-uv run streamlit run app.py
-```
-
-5. Optional CLIs:
-
-```bash
-uv run python -m judgetrust.calibrate
-uv run python -m judgetrust.live --sample lq-05
-uv run python -m judgetrust.live --question "Does sunscreen matter on a cloudy day?"
-uv run python -m judgetrust.biasprobe
-```
-
 ## The three components
 
 Calibration, live compare, and the bias probe never run together. The Trust Report pulls **kappa** from calibration, the **winner and position-consistency** from live, and **length-bias** from the probe.
@@ -62,7 +31,7 @@ A test set **for the judge**. It never generates answers.
 
 The judge (`gpt-4.1`) scores every row, both orderings. Each row becomes one judge label, which we compare to the human label.
 
-**Cohen’s kappa** is the headline: how well the judge agrees with humans *beyond chance*. Raw agreement (“they matched 80% of the time”) overstates reliability — if most rows are “B is better,” a judge that always picks B also looks accurate. Kappa subtracts that luck:
+**Cohen’s kappa** is the headline: how well the judge agrees with humans _beyond chance_. Raw agreement (“they matched 80% of the time”) overstates reliability — if most rows are “B is better,” a judge that always picks B also looks accurate. Kappa subtracts that luck:
 
 ```
 kappa = (observed agreement − chance agreement) / (1 − chance agreement)
@@ -111,3 +80,34 @@ Best practice is a judge from a **different model family** than the generators. 
 - `judgetrust/biasprobe/` — length-bias probe
 - `judgetrust/report/` — Trust Report assembler
 - `judgetrust/ui/` — Streamlit UI (`app.py` is the entry)
+
+## Setup
+
+1. Install uv:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Install the project:
+
+```bash
+uv sync
+```
+
+3. Copy `.env.example` to `.env` and add `OPENAI_API_KEY`.
+
+4. Run the app:
+
+```bash
+uv run streamlit run app.py
+```
+
+5. Optional CLIs:
+
+```bash
+uv run python -m judgetrust.calibrate
+uv run python -m judgetrust.live --sample lq-05
+uv run python -m judgetrust.live --question "Does sunscreen matter on a cloudy day?"
+uv run python -m judgetrust.biasprobe
+```
