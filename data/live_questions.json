@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "disclaimer": "Eval tooling only. Not medical advice. Sample questions for live prompt A vs B comparison."
+  },
+  "questions": [
+    {
+      "id": "lq-01",
+      "question": "I just took acetaminophen for a headache. Is it fine to have a few drinks tonight?"
+    },
+    {
+      "id": "lq-02",
+      "question": "My cold has lasted three days. Should I start leftover antibiotics from last year?"
+    },
+    {
+      "id": "lq-03",
+      "question": "Can I give honey to my 8-month-old for a cough?"
+    },
+    {
+      "id": "lq-04",
+      "question": "When should an adult with a fever see a doctor?"
+    },
+    {
+      "id": "lq-05",
+      "question": "Does sunscreen still matter on a cloudy day?"
+    },
+    {
+      "id": "lq-06",
+      "question": "What is the usual way to remove a tick?"
+    },
+    {
+      "id": "lq-07",
+      "question": "Should I put butter on a burn?"
+    },
+    {
+      "id": "lq-08",
+      "question": "How do I clean a minor kitchen cut?"
+    }
+  ]
+}
