@@ -10,6 +10,35 @@ This is **eval tooling**, not a medical product. Generated answers are judge inp
 
 Calibration, live compare, and the bias probe never run together. The Trust Report pulls **kappa** from calibration, the **winner and position-consistency** from live, and **length-bias** from the probe.
 
+```mermaid
+flowchart TB
+    subgraph modes["Run one mode at a time"]
+        direction LR
+        C["Calibrate judge<br/>human-labeled pairs<br/>no generation"]
+        L["Compare prompts live<br/>prompt A vs B<br/>3 generator models"]
+        P["Bias probe<br/>short-correct vs<br/>long-wrong pairs"]
+    end
+
+    J["Judge both orderings<br/>A-then-B and B-then-A"]
+    C --> J
+    L --> J
+    P --> J
+
+    J --> Q{Same winner<br/>both ways?}
+    Q -->|yes| S[Winner counts]
+    Q -->|no| T[Tie + position-bias flag]
+
+    S --> R
+    T --> R
+
+    subgraph R["Judge Trust Report"]
+        direction LR
+        K["kappa<br/>← calibrate"]
+        W["B win rate + consistency<br/>← live"]
+        X["length-bias<br/>← probe"]
+    end
+```
+
 Every judge comparison (all three components) is run **both orderings**: A-then-B and B-then-A. If those two verdicts agree, that winner counts. If they disagree, the row is a **tie** and is flagged as **position bias** — the judge flipped with which answer sat first.
 
 ### 1. Calibrate judge
