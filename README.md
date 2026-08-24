@@ -140,3 +140,13 @@ uv run python -m judgetrust.live --sample lq-05
 uv run python -m judgetrust.live --question "Does sunscreen matter on a cloudy day?"
 uv run python -m judgetrust.biasprobe
 ```
+
+## Stack
+
+- **Python 3.11+** — app language
+- **uv** — dependency management and `uv run`
+- **LangChain** (`langchain`, `langchain-openai`) — LCEL chains for generators and the judge (not LangGraph)
+- **OpenAI** — default provider for generators and judge
+- **scikit-learn** — Cohen’s kappa (`cohen_kappa_score`) and agreement metrics
+- **Streamlit** — UI
+- **python-dotenv** — `OPENAI_API_KEY` from `.env`
