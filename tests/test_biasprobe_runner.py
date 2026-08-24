@@ -59,6 +59,8 @@ def test_always_pick_longer_is_full_length_bias() -> None:
     assert report.length_bias_rate == 1.0
     assert report.position_bias_rate == 0.0
     assert all(row.length_bias_hit for row in report.rows)
+    assert report.panel_dissent_rate == 0.0
+    assert len(report.judge_length_bias) == 3
 
 
 def test_always_pick_shorter_is_zero_length_bias() -> None:

@@ -49,6 +49,8 @@ def test_b_wins_all_models() -> None:
     assert report.cross_model_agreement == 1.0
     assert report.position_consistency == 1.0
     assert all(duel.winner == "B" and duel.stable for duel in report.duels)
+    assert report.panel_dissent_rate == 0.0
+    assert all(len(duel.votes) == 3 for duel in report.duels)
 
 
 def test_mixed_winners_agreement() -> None:

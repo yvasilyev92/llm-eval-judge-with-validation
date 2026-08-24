@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from judgetrust.config import (
     GENERATOR_MODELS,
-    JUDGE_MODEL,
+    JUDGE_MODELS,
     KAPPA_BANDS,
     PROMPT_A,
     PROMPT_B,
@@ -19,9 +19,10 @@ def test_generator_list_has_three_models() -> None:
     assert all(isinstance(name, str) and name for name in GENERATOR_MODELS)
 
 
-def test_judge_model_is_configured() -> None:
-    assert isinstance(JUDGE_MODEL, str) and JUDGE_MODEL
-    assert JUDGE_MODEL not in GENERATOR_MODELS
+def test_judge_panel_has_three_models() -> None:
+    assert len(JUDGE_MODELS) == 3
+    assert all(isinstance(name, str) and name for name in JUDGE_MODELS)
+    assert len(set(JUDGE_MODELS)) == 3
 
 
 def test_prompts_are_distinct() -> None:
@@ -52,7 +53,7 @@ def test_trust_thresholds_present() -> None:
 def test_get_settings_snapshot() -> None:
     settings = get_settings()
     assert isinstance(settings, Settings)
-    assert settings.judge_model == JUDGE_MODEL
+    assert settings.judge_models == JUDGE_MODELS
     assert settings.generator_models == GENERATOR_MODELS
     assert settings.llm_timeout_seconds > 0
     assert settings.llm_max_retries >= 0

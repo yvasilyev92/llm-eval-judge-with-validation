@@ -54,6 +54,9 @@ def test_perfect_agreement_is_almost_perfect() -> None:
     assert report.kappa_band == "almost-perfect"
     assert report.position_consistency == 1.0
     assert report.disagreements == ()
+    assert report.panel_dissent_rate == 0.0
+    assert len(report.judge_kappas) == 3
+    assert all(item.kappa == 1.0 for item in report.judge_kappas)
 
 
 def test_inverted_labels_disagree() -> None:
@@ -112,6 +115,8 @@ def test_persist_and_reload(tmp_path: Path) -> None:
     assert loaded["mode"] == "calibration"
     assert loaded["n"] == report.n
     assert "Kappa corrects for chance" in loaded["raw_agreement_note"]
+    assert loaded["judge_models"] == list(report.judge_models)
+    assert loaded["panel_dissent_rate"] == 0.0
 
 
 def test_format_report_headlines_kappa() -> None:

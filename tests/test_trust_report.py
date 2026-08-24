@@ -91,8 +91,9 @@ def test_model_family() -> None:
 
 def test_self_preference_defaults() -> None:
     settings = Settings()
-    assert has_self_preference(settings.judge_model, settings.generator_models) is True
+    assert has_self_preference(settings.judge_models, settings.generator_models) is True
     assert has_self_preference("claude-sonnet-4-5", settings.generator_models) is False
+    assert has_self_preference(("claude-sonnet-4-5", "gemini-2.5-pro"), settings.generator_models) is False
 
 
 def test_traffic_lights() -> None:
@@ -226,6 +227,53 @@ def test_signal_colors_kappa() -> None:
     assert cons_c == "green"
     assert len_c == "green"
     assert overall == "amber"
+
+
+def test_assemble_panel_fields() -> None:
+    report = assemble_trust_report(
+        calibration=_calibration(
+            judge_models=["gpt-4.1", "gpt-4o", "gpt-4.1-mini"],
+            panel_dissent_rate=0.20,
+            judge_kappas=[
+                {"model": "gpt-4.1", "kappa": 0.70, "kappa_band": "substantial", "n_scored": 35},
+            ],
+        ),
+        live=_live(
+            judge_models=["gpt-4.1", "gpt-4o", "gpt-4.1-mini"],
+            panel_dissent_rate=0.33,
+            duels=[
+                {
+                    **_duel("gpt-4o", "B"),
+                    "votes": [
+                        {"model": "gpt-4.1", "winner": "B", "stable": True, "position_bias": False, "error": None},
+                        {"model": "gpt-4o", "winner": "B", "stable": True, "position_bias": False, "error": None},
+                        {"model": "gpt-4.1-mini", "winner": "A", "stable": True, "position_bias": False, "error": None},
+                    ],
+                    "dissent": True,
+                },
+                _duel("gpt-4o-mini", "B"),
+                _duel("gpt-4.1-mini", "B"),
+            ],
+        ),
+        probe=_probe(),
+        load_missing_from_disk=False,
+    )
+    assert report.judge_models == ("gpt-4.1", "gpt-4o", "gpt-4.1-mini")
+    assert report.panel_dissent_rate == 0.33
+    assert report.per_model[0].dissent is True
+    assert len(report.per_model[0].votes) == 3
+    assert report.judge_kappas[0].model == "gpt-4.1"
+    assert "33% panel dissent" in report.verdict
+
+
+def test_assemble_legacy_judge_model_string() -> None:
+    report = assemble_trust_report(
+        calibration=_calibration(),
+        live=_live(),
+        probe=_probe(),
+        load_missing_from_disk=False,
+    )
+    assert report.judge_models == ("gpt-4.1",)
 
 
 def test_build_verdict_partial() -> None:
