@@ -27,7 +27,7 @@ class Judge:
         settings: Settings | None = None,
     ) -> None:
         self.settings = settings or get_settings()
-        self.model_name = model or self.settings.judge_model
+        self.model_name = model or self.settings.judge_models[0]
         self.llm = chat_model or make_chat_model(
             self.model_name,
             temperature=self.settings.judge_temperature,

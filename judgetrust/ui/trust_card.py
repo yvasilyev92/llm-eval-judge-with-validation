@@ -88,14 +88,41 @@ def render_trust_card(report: TrustReport) -> None:
         chips = []
         for duel in report.per_model:
             stable = "stable" if duel.stable else "unstable"
+            vote_bit = ""
+            if duel.votes:
+                tally = ", ".join(
+                    f"{vote.model}={vote.winner or 'err'}"
+                    for vote in duel.votes
+                )
+                vote_bit = f" · {tally}"
+            dissent = " · dissent" if duel.dissent else ""
             chips.append(
-                f'<span class="jt-chip"><b>{duel.model}</b> · {duel.winner or "error"} · {stable}</span>'
+                f'<span class="jt-chip"><b>{duel.model}</b> · panel {duel.winner or "error"} '
+                f"· {stable}{dissent}{vote_bit}</span>"
             )
         st.markdown("".join(chips), unsafe_allow_html=True)
 
+    if report.judge_models:
+        dissent = (
+            f" · dissent {_pct(report.panel_dissent_rate)}"
+            if report.panel_dissent_rate is not None
+            else ""
+        )
+        st.caption(
+            "Panel: " + " · ".join(report.judge_models) + dissent + "."
+        )
+
+    if report.judge_kappas:
+        bits = []
+        for item in report.judge_kappas:
+            k = _num(item.kappa)
+            band = f" {item.kappa_band}" if item.kappa_band else ""
+            bits.append(f"{item.model} kappa {k}{band}")
+        st.caption("Per-judge kappa: " + " · ".join(bits) + ".")
+
     if report.disagreement_ids:
         st.caption(
-            "Judge disagreed with humans on "
+            "Panel disagreed with humans on "
             + ", ".join(report.disagreement_ids)
             + "."
         )
@@ -131,7 +158,7 @@ def _limits_text(report: TrustReport) -> str:
     if report.calibration_n:
         n_miss = len(report.disagreement_ids)
         miss = (
-            f" The judge disagreed with humans on {n_miss} row"
+            f" The panel disagreed with humans on {n_miss} row"
             f"{'s' if n_miss != 1 else ''}."
             if n_miss
             else ""

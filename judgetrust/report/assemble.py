@@ -9,7 +9,7 @@ from typing import Any
 from judgetrust.calibrate.metrics import RAW_AGREEMENT_NOTE
 from judgetrust.config import Settings, get_settings
 from judgetrust.logging_setup import get_logger
-from judgetrust.models import ModelDuelSummary, TrustReport, Winner
+from judgetrust.models import JudgeKappa, JudgeVote, ModelDuelSummary, TrustReport, Winner
 from judgetrust.report.colors import signal_colors
 from judgetrust.report.family import (
     SELF_PREFERENCE_NOTE,
@@ -63,6 +63,86 @@ def _as_str(value: Any) -> str | None:
     return None
 
 
+def _votes(raw: Any) -> tuple[JudgeVote, ...]:
+    if not isinstance(raw, list):
+        return ()
+    votes: list[JudgeVote] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        model = item.get("model")
+        if not isinstance(model, str) or not model:
+            continue
+        error = item.get("error")
+        votes.append(
+            JudgeVote(
+                model=model,
+                winner=_as_winner(item.get("winner")),
+                stable=bool(item.get("stable")),
+                position_bias=bool(item.get("position_bias")),
+                error=error if isinstance(error, str) else None,
+            )
+        )
+    return tuple(votes)
+
+
+def _judge_models_from(
+    *sources: Mapping[str, Any] | None,
+    fallback: tuple[str, ...],
+) -> tuple[str, ...]:
+    for source in sources:
+        if not source:
+            continue
+        raw = source.get("judge_models")
+        if isinstance(raw, list) and raw and all(isinstance(item, str) and item for item in raw):
+            return tuple(raw)
+        single = source.get("judge_model")
+        if isinstance(single, str) and single.strip() and single != "injected":
+            parts = tuple(part.strip() for part in single.split(",") if part.strip())
+            if parts:
+                return parts
+    return fallback
+
+
+def _judge_kappas(calibration: Mapping[str, Any] | None) -> tuple[JudgeKappa, ...]:
+    if not calibration:
+        return ()
+    raw = calibration.get("judge_kappas")
+    if not isinstance(raw, list):
+        return ()
+    items: list[JudgeKappa] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        model = entry.get("model")
+        if not isinstance(model, str) or not model:
+            continue
+        band = entry.get("kappa_band")
+        items.append(
+            JudgeKappa(
+                model=model,
+                kappa=_as_float(entry.get("kappa")),
+                kappa_band=band if isinstance(band, str) else None,
+                n_scored=_as_int(entry.get("n_scored")) or 0,
+            )
+        )
+    return tuple(items)
+
+
+def _panel_dissent(
+    live: Mapping[str, Any] | None,
+    calibration: Mapping[str, Any] | None,
+    probe: Mapping[str, Any] | None,
+) -> float | None:
+    for source in (live, calibration, probe):
+        if not source:
+            continue
+        value = _as_float(source.get("panel_dissent_rate"))
+        if value is not None:
+            return value
+    return None
+
+
 def _disagreement_ids(calibration: Mapping[str, Any] | None) -> tuple[str, ...]:
     if not calibration:
         return ()
@@ -95,6 +175,8 @@ def _per_model(live: Mapping[str, Any] | None) -> tuple[ModelDuelSummary, ...]:
                 winner=_as_winner(item.get("winner")),
                 stable=bool(item.get("stable")),
                 error=item.get("error") if isinstance(item.get("error"), str) else None,
+                votes=_votes(item.get("votes")),
+                dissent=bool(item.get("dissent")),
             )
         )
     return tuple(chips)
@@ -110,6 +192,7 @@ def build_verdict(
     length_bias_rate: float | None,
     overall_color: str,
     missing: tuple[str, ...],
+    panel_dissent_rate: float | None = None,
 ) -> str:
     """Plain-language Trust Report line."""
 
@@ -134,9 +217,15 @@ def build_verdict(
             if supported
             else "treat the win as suggestive, not proven."
         )
+        dissent = (
+            f", {panel_dissent_rate:.0%} panel dissent"
+            if panel_dissent_rate is not None
+            else ""
+        )
         return (
             f"{win_clause}, {joiner} trust is {band}: judge–human kappa {kappa:.2f}, "
-            f"{pos_bias:.0%} position bias, {length_bias_rate:.0%} length bias — {tail}"
+            f"{pos_bias:.0%} position bias, {length_bias_rate:.0%} length bias"
+            f"{dissent} — {tail}"
         )
 
     parts = [win_clause]
@@ -223,17 +312,19 @@ def assemble_trust_report(
     length_bias = _as_float(probe.get("length_bias_rate")) if probe else None
     probe_pos = _as_float(probe.get("position_bias_rate")) if probe else None
 
-    judge_model = cfg.judge_model
+    judge_models = _judge_models_from(
+        live, calibration, probe, fallback=tuple(cfg.judge_models)
+    )
     generators = tuple(cfg.generator_models)
     if live:
-        live_judge = live.get("judge_model")
-        if isinstance(live_judge, str) and live_judge and live_judge != "injected":
-            judge_model = live_judge
         live_gens = live.get("generator_models")
         if isinstance(live_gens, list) and all(isinstance(item, str) for item in live_gens):
             generators = tuple(live_gens)
 
-    self_pref = has_self_preference(judge_model, generators)
+    panel_dissent = _panel_dissent(live, calibration, probe)
+    judge_kappas = _judge_kappas(calibration)
+
+    self_pref = has_self_preference(judge_models, generators)
     kappa_color, consistency_color, length_color, overall = signal_colors(
         kappa=kappa,
         position_consistency=position_consistency,
@@ -249,6 +340,7 @@ def assemble_trust_report(
         length_bias_rate=length_bias,
         overall_color=overall,
         missing=tuple(missing),
+        panel_dissent_rate=panel_dissent,
     )
     return TrustReport(
         prompt_b_win_rate=b_rate,
@@ -271,7 +363,7 @@ def assemble_trust_report(
         consistency_color=consistency_color,
         length_bias_color=length_color,
         missing=tuple(missing),
-        judge_model=judge_model,
+        judge_models=judge_models,
         generator_models=generators,
         live_question=live_question,
         live_question_id=live_question_id,
@@ -280,4 +372,6 @@ def assemble_trust_report(
         disagreement_ids=disagreement_ids,
         probe_n=probe_n,
         probe_n_scored=probe_n_scored,
+        panel_dissent_rate=panel_dissent,
+        judge_kappas=judge_kappas,
     )

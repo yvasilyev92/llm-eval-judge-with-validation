@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 SELF_PREFERENCE_NOTE = (
-    "The judge shares a model family with at least one generator, so "
-    "self-preference bias is possible. Point JUDGE_MODEL at a different "
-    "family (Anthropic or Google) when that API key is available."
+    "The judge panel shares a model family with at least one generator, so "
+    "self-preference bias is possible. A same-family panel does not cancel that "
+    "risk. Point JUDGE_MODELS at a different family (Anthropic or Google) when "
+    "that API key is available."
 )
 
 
@@ -24,10 +25,16 @@ def model_family(model_name: str) -> str:
     return "unknown"
 
 
-def has_self_preference(judge_model: str, generator_models: Sequence[str]) -> bool:
-    """True when the judge family overlaps any generator family."""
+def has_self_preference(
+    judge_models: str | Sequence[str],
+    generator_models: Sequence[str],
+) -> bool:
+    """True when any judge family overlaps any generator family."""
 
-    judge_fam = model_family(judge_model)
-    if judge_fam == "unknown":
-        return False
-    return judge_fam in {model_family(name) for name in generator_models}
+    judges = (judge_models,) if isinstance(judge_models, str) else tuple(judge_models)
+    gen_fams = {model_family(name) for name in generator_models}
+    for name in judges:
+        fam = model_family(name)
+        if fam != "unknown" and fam in gen_fams:
+            return True
+    return False

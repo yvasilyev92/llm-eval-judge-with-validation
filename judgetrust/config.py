@@ -11,9 +11,13 @@ GENERATOR_MODELS: tuple[str, ...] = (
     "gpt-4.1-mini",
 )
 
-# Prefer a different tier than the generators. Point this at a non-OpenAI
-# model (e.g. claude-sonnet or gemini) when that provider key is available.
-JUDGE_MODEL: str = "gpt-4.1"
+# Always-on 3-judge panel. Defaults are OpenAI so one key still works.
+# A same-family panel does not cancel self-preference bias.
+JUDGE_MODELS: tuple[str, ...] = (
+    "gpt-4.1",
+    "gpt-4o",
+    "gpt-4.1-mini",
+)
 
 PROMPT_A: str = "Answer the user's health question."
 PROMPT_B: str = (
@@ -52,7 +56,7 @@ class Settings:
     """Immutable snapshot of runtime config. Later phases can construct variants."""
 
     generator_models: tuple[str, ...] = GENERATOR_MODELS
-    judge_model: str = JUDGE_MODEL
+    judge_models: tuple[str, ...] = JUDGE_MODELS
     prompt_a: str = PROMPT_A
     prompt_b: str = PROMPT_B
     kappa_bands: tuple[tuple[float, str], ...] = KAPPA_BANDS

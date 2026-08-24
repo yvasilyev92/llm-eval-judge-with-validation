@@ -29,8 +29,9 @@ def run() -> None:
     with st.sidebar:
         st.header("Config")
         st.caption("Edit `judgetrust/config.py` to change models or prompts.")
-        st.write("**Judge**")
-        st.code(settings.judge_model, language=None)
+        st.write("**Judge panel**")
+        for model in settings.judge_models:
+            st.code(model, language=None)
         st.write("**Generators**")
         for model in settings.generator_models:
             st.code(model, language=None)

@@ -82,6 +82,76 @@ class PairwiseResult:
 
 
 @dataclass(frozen=True)
+class JudgeVote:
+    """One panel member's both-orderings outcome."""
+
+    model: str
+    winner: Winner | None
+    stable: bool
+    position_bias: bool
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "model": self.model,
+            "winner": self.winner,
+            "stable": self.stable,
+            "position_bias": self.position_bias,
+            "error": self.error,
+        }
+
+
+@dataclass(frozen=True)
+class PanelResult:
+    """Majority vote over three both-orderings judges."""
+
+    question: str
+    answer_a: str
+    answer_b: str
+    votes: tuple[JudgeVote, ...]
+    final_winner: Winner
+    stable: bool
+    position_bias: bool
+    dissent: bool
+    n_votes: int
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class JudgeKappa:
+    """Per-judge Cohen's kappa vs humans on rows that judge scored."""
+
+    model: str
+    kappa: float | None
+    kappa_band: str | None
+    n_scored: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "model": self.model,
+            "kappa": self.kappa,
+            "kappa_band": self.kappa_band,
+            "n_scored": self.n_scored,
+        }
+
+
+@dataclass(frozen=True)
+class JudgeLengthBias:
+    """Per-judge length-bias rate on scored probe rows."""
+
+    model: str
+    length_bias_rate: float | None
+    n_scored: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "model": self.model,
+            "length_bias_rate": self.length_bias_rate,
+            "n_scored": self.n_scored,
+        }
+
+
+@dataclass(frozen=True)
 class CalibrationRow:
     """One human-labeled pairwise example from the calibration set."""
 
@@ -95,7 +165,7 @@ class CalibrationRow:
 
 @dataclass(frozen=True)
 class CalibrationRowResult:
-    """Judge outcome for one calibration row."""
+    """Judge outcome for one calibration row (panel winner + per-judge votes)."""
 
     id: str
     human_winner: Winner
@@ -104,6 +174,8 @@ class CalibrationRowResult:
     stable: bool
     position_bias: bool
     error: str | None = None
+    votes: tuple[JudgeVote, ...] = ()
+    dissent: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -114,6 +186,8 @@ class CalibrationRowResult:
             "stable": self.stable,
             "position_bias": self.position_bias,
             "error": self.error,
+            "votes": [vote.to_dict() for vote in self.votes],
+            "dissent": self.dissent,
         }
 
 
@@ -122,7 +196,7 @@ class CalibrationReport:
     """Aggregated calibration metrics for the Trust Report."""
 
     mode: str
-    judge_model: str
+    judge_models: tuple[str, ...]
     n: int
     n_scored: int
     n_errors: int
@@ -131,6 +205,8 @@ class CalibrationReport:
     raw_agreement: float | None
     raw_agreement_note: str
     position_consistency: float
+    panel_dissent_rate: float | None
+    judge_kappas: tuple[JudgeKappa, ...]
     disagreements: tuple[CalibrationRowResult, ...]
     rows: tuple[CalibrationRowResult, ...]
     generated_at: str
@@ -138,7 +214,8 @@ class CalibrationReport:
     def to_dict(self) -> dict[str, object]:
         return {
             "mode": self.mode,
-            "judge_model": self.judge_model,
+            "judge_models": list(self.judge_models),
+            "judge_model": ", ".join(self.judge_models),
             "n": self.n,
             "n_scored": self.n_scored,
             "n_errors": self.n_errors,
@@ -147,6 +224,8 @@ class CalibrationReport:
             "raw_agreement": self.raw_agreement,
             "raw_agreement_note": self.raw_agreement_note,
             "position_consistency": self.position_consistency,
+            "panel_dissent_rate": self.panel_dissent_rate,
+            "judge_kappas": [item.to_dict() for item in self.judge_kappas],
             "disagreements": [row.to_dict() for row in self.disagreements],
             "rows": [row.to_dict() for row in self.rows],
             "generated_at": self.generated_at,
@@ -172,6 +251,8 @@ class LiveDuel:
     stable: bool
     position_bias: bool
     error: str | None = None
+    votes: tuple[JudgeVote, ...] = ()
+    dissent: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -182,6 +263,8 @@ class LiveDuel:
             "stable": self.stable,
             "position_bias": self.position_bias,
             "error": self.error,
+            "votes": [vote.to_dict() for vote in self.votes],
+            "dissent": self.dissent,
         }
 
 
@@ -192,7 +275,7 @@ class LiveReport:
     mode: str
     question: str
     question_id: str | None
-    judge_model: str
+    judge_models: tuple[str, ...]
     generator_models: tuple[str, ...]
     duels: tuple[LiveDuel, ...]
     n: int
@@ -201,6 +284,7 @@ class LiveReport:
     prompt_b_win_rate: float | None
     cross_model_agreement: float | None
     position_consistency: float
+    panel_dissent_rate: float | None
     generated_at: str
 
     def to_dict(self) -> dict[str, object]:
@@ -208,7 +292,8 @@ class LiveReport:
             "mode": self.mode,
             "question": self.question,
             "question_id": self.question_id,
-            "judge_model": self.judge_model,
+            "judge_models": list(self.judge_models),
+            "judge_model": ", ".join(self.judge_models),
             "generator_models": list(self.generator_models),
             "duels": [duel.to_dict() for duel in self.duels],
             "n": self.n,
@@ -217,6 +302,7 @@ class LiveReport:
             "prompt_b_win_rate": self.prompt_b_win_rate,
             "cross_model_agreement": self.cross_model_agreement,
             "position_consistency": self.position_consistency,
+            "panel_dissent_rate": self.panel_dissent_rate,
             "generated_at": self.generated_at,
         }
 
@@ -234,7 +320,7 @@ class BiasProbeRow:
 
 @dataclass(frozen=True)
 class BiasProbeRowResult:
-    """Judge outcome for one bias-probe row."""
+    """Judge outcome for one bias-probe row (panel winner + per-judge votes)."""
 
     id: str
     longer_worse: Literal["A", "B"]
@@ -243,6 +329,8 @@ class BiasProbeRowResult:
     stable: bool
     position_bias: bool
     error: str | None = None
+    votes: tuple[JudgeVote, ...] = ()
+    dissent: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -253,6 +341,8 @@ class BiasProbeRowResult:
             "stable": self.stable,
             "position_bias": self.position_bias,
             "error": self.error,
+            "votes": [vote.to_dict() for vote in self.votes],
+            "dissent": self.dissent,
         }
 
 
@@ -261,24 +351,29 @@ class BiasProbeReport:
     """Length-bias and position-bias flags for the Trust Report."""
 
     mode: str
-    judge_model: str
+    judge_models: tuple[str, ...]
     n: int
     n_scored: int
     n_errors: int
     length_bias_rate: float | None
     position_bias_rate: float
+    panel_dissent_rate: float | None
+    judge_length_bias: tuple[JudgeLengthBias, ...]
     rows: tuple[BiasProbeRowResult, ...]
     generated_at: str
 
     def to_dict(self) -> dict[str, object]:
         return {
             "mode": self.mode,
-            "judge_model": self.judge_model,
+            "judge_models": list(self.judge_models),
+            "judge_model": ", ".join(self.judge_models),
             "n": self.n,
             "n_scored": self.n_scored,
             "n_errors": self.n_errors,
             "length_bias_rate": self.length_bias_rate,
             "position_bias_rate": self.position_bias_rate,
+            "panel_dissent_rate": self.panel_dissent_rate,
+            "judge_length_bias": [item.to_dict() for item in self.judge_length_bias],
             "rows": [row.to_dict() for row in self.rows],
             "generated_at": self.generated_at,
         }
@@ -295,6 +390,8 @@ class ModelDuelSummary:
     winner: Winner | None
     stable: bool
     error: str | None = None
+    votes: tuple[JudgeVote, ...] = ()
+    dissent: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -302,6 +399,8 @@ class ModelDuelSummary:
             "winner": self.winner,
             "stable": self.stable,
             "error": self.error,
+            "votes": [vote.to_dict() for vote in self.votes],
+            "dissent": self.dissent,
         }
 
 
@@ -329,7 +428,7 @@ class TrustReport:
     consistency_color: ColorName
     length_bias_color: ColorName
     missing: tuple[str, ...]
-    judge_model: str
+    judge_models: tuple[str, ...]
     generator_models: tuple[str, ...]
     live_question: str | None = None
     live_question_id: str | None = None
@@ -338,6 +437,8 @@ class TrustReport:
     disagreement_ids: tuple[str, ...] = ()
     probe_n: int | None = None
     probe_n_scored: int | None = None
+    panel_dissent_rate: float | None = None
+    judge_kappas: tuple[JudgeKappa, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -361,7 +462,8 @@ class TrustReport:
             "consistency_color": self.consistency_color,
             "length_bias_color": self.length_bias_color,
             "missing": list(self.missing),
-            "judge_model": self.judge_model,
+            "judge_models": list(self.judge_models),
+            "judge_model": ", ".join(self.judge_models),
             "generator_models": list(self.generator_models),
             "live_question": self.live_question,
             "live_question_id": self.live_question_id,
@@ -370,4 +472,6 @@ class TrustReport:
             "disagreement_ids": list(self.disagreement_ids),
             "probe_n": self.probe_n,
             "probe_n_scored": self.probe_n_scored,
+            "panel_dissent_rate": self.panel_dissent_rate,
+            "judge_kappas": [item.to_dict() for item in self.judge_kappas],
         }

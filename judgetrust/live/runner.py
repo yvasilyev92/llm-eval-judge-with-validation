@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 
 from judgetrust.config import Settings, get_settings
 from judgetrust.generators.chain import GenerateFn, generate_answer
-from judgetrust.judge.chain import Judge
-from judgetrust.judge.harness import EvaluateFn, compare_both_orderings
+from judgetrust.judge.harness import EvaluateFn
+from judgetrust.judge.panel import compare_panel, dissent_rate
 from judgetrust.live.metrics import (
     cross_model_agreement,
     position_consistency,
@@ -24,42 +25,32 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RESULTS_PATH = REPO_ROOT / "data" / "results" / "live.json"
 
 
-def _judge_error(result) -> str | None:
-    if result.run_a_first.verdict is None and result.run_b_first.verdict is None:
-        return (
-            result.run_a_first.error
-            or result.run_b_first.error
-            or "both_orderings_failed"
-        )
-    return None
-
-
 def run_live(
     question: str,
     *,
     question_id: str | None = None,
     generate_fn: GenerateFn | None = None,
     evaluate_fn: EvaluateFn | None = None,
-    judge: Judge | None = None,
+    evaluate_fns: Mapping[str, EvaluateFn] | None = None,
     settings: Settings | None = None,
     persist: bool = False,
     results_path: Path | None = None,
 ) -> LiveReport:
-    """Generate prompt A vs B on each generator model, then judge both orderings.
+    """Generate prompt A vs B on each generator model, then panel-judge both orderings.
 
-    Inject ``generate_fn`` and ``evaluate_fn`` in tests. Does not load calibration.
+    Inject ``generate_fn`` and ``evaluate_fn`` / ``evaluate_fns`` in tests.
+    Does not load calibration.
     """
 
     if not question.strip():
         raise ValueError("question must be a non-empty string")
 
     cfg = settings or get_settings()
-    judge_model = "injected" if evaluate_fn is not None else cfg.judge_model
     logger.info(
-        "live_start mode=%s n_models=%s judge_model=%s question_chars=%s",
+        "live_start mode=%s n_models=%s judge_models=%s question_chars=%s",
         Mode.LIVE.value,
         len(cfg.generator_models),
-        judge_model,
+        ",".join(cfg.judge_models),
         len(question),
     )
 
@@ -72,18 +63,20 @@ def run_live(
             prompt_b=cfg.prompt_b,
             generate_fn=generate_fn,
             evaluate_fn=evaluate_fn,
-            judge=judge,
+            evaluate_fns=evaluate_fns,
+            settings=cfg,
         )
         duels.append(duel)
 
     scored_winners: list[Winner] = [
         duel.winner for duel in duels if duel.winner is not None
     ]
+    scored = [duel for duel in duels if duel.winner is not None]
     report = LiveReport(
         mode=Mode.LIVE.value,
         question=question,
         question_id=question_id,
-        judge_model=judge_model,
+        judge_models=tuple(cfg.judge_models),
         generator_models=tuple(cfg.generator_models),
         duels=tuple(duels),
         n=len(duels),
@@ -92,13 +85,15 @@ def run_live(
         prompt_b_win_rate=prompt_b_win_rate(scored_winners),
         cross_model_agreement=cross_model_agreement(scored_winners),
         position_consistency=position_consistency([duel.stable for duel in duels]),
+        panel_dissent_rate=dissent_rate([duel.dissent for duel in scored]),
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
     logger.info(
-        "live_done b_win_rate=%s agreement=%s consistency=%.3f errors=%s",
+        "live_done b_win_rate=%s agreement=%s consistency=%.3f dissent=%s errors=%s",
         report.prompt_b_win_rate,
         report.cross_model_agreement,
         report.position_consistency,
+        report.panel_dissent_rate,
         report.n_errors,
     )
     if persist:
@@ -114,7 +109,8 @@ def _run_one_model(
     prompt_b: str,
     generate_fn: GenerateFn | None,
     evaluate_fn: EvaluateFn | None,
-    judge: Judge | None,
+    evaluate_fns: Mapping[str, EvaluateFn] | None,
+    settings: Settings,
 ) -> LiveDuel:
     try:
         answer_a = generate_answer(
@@ -139,23 +135,25 @@ def _run_one_model(
             error=f"generate_failed:{type(exc).__name__}",
         )
 
-    pairwise = compare_both_orderings(
+    panel = compare_panel(
         question,
         answer_a,
         answer_b,
         evaluate_fn=evaluate_fn,
-        judge=judge,
+        evaluate_fns=evaluate_fns,
+        settings=settings,
     )
-    error = _judge_error(pairwise)
-    winner: Winner | None = None if error else pairwise.final_winner
+    winner: Winner | None = None if panel.error else panel.final_winner
     return LiveDuel(
         model=model,
         answer_a=answer_a,
         answer_b=answer_b,
         winner=winner,
-        stable=pairwise.stable,
-        position_bias=pairwise.position_bias,
-        error=error,
+        stable=panel.stable,
+        position_bias=panel.position_bias,
+        error=panel.error,
+        votes=panel.votes,
+        dissent=panel.dissent,
     )
 
 
@@ -192,19 +190,28 @@ def format_report(report: LiveReport) -> str:
         if report.cross_model_agreement is not None
         else "n/a"
     )
+    dissent = (
+        f"{report.panel_dissent_rate:.0%}"
+        if report.panel_dissent_rate is not None
+        else "n/a"
+    )
     qid = f" ({report.question_id})" if report.question_id else ""
     lines = [
         "Live report",
         f"  Question{qid}: {report.question}",
-        f"  Judge: {report.judge_model}",
+        f"  Panel: {', '.join(report.judge_models)}",
         f"  n={report.n}  scored={report.n_scored}  errors={report.n_errors}",
         f"  Prompt B win rate: {b_rate}",
         f"  Cross-model agreement: {agreement}",
         f"  Position consistency: {report.position_consistency:.0%}",
+        f"  Panel dissent: {dissent}",
     ]
     for duel in report.duels:
+        votes = ", ".join(
+            f"{vote.model}={vote.winner or vote.error}" for vote in duel.votes
+        )
         lines.append(
-            f"    {duel.model}  winner={duel.winner}  stable={duel.stable}  "
-            f"error={duel.error}"
+            f"    {duel.model}  panel={duel.winner}  stable={duel.stable}  "
+            f"dissent={duel.dissent}  votes=[{votes}]  error={duel.error}"
         )
     return "\n".join(lines)
